@@ -48,6 +48,10 @@ class TransposedLinearComponent(nn.Module):
     def B(self):
         return einops.einsum(self.original_A, torch.ones(1), 'i C d_in m, b -> i C m d_in')
 
+    @property
+    def component_weights(self):
+        return einops.einsum(self.A, self.B, 'i C d_out m, i C m d_in -> i C d_out d_in')
+
     def forward(self, x, topk_mask=None, cache=None, name=''):
         A = self.A
         B = self.B

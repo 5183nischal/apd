@@ -3,7 +3,6 @@ import torch.nn as nn
 import torch.nn.functional as F
 import einops
 from pathlib import Path
-from typing import Dict
 
 class SparseFeatureDataset:
     def __init__(self, n_instances, n_features, feature_probability, device, generation="at_least_zero_active"):
@@ -47,19 +46,12 @@ class TMSModel(nn.Module):
         else:
             self.hidden = None
 
-    def forward(self, x, topk_mask=None, cache: Dict[str, torch.Tensor] | None = None):
-        if cache is not None:
-            cache["linear1.hook_pre"] = x
+    def forward(self, x):
         h = einops.einsum(x, self.W1, "b i f, i f h -> b i h")
-        if cache is not None:
-            cache["linear1.hook_post"] = h
-            cache["linear2.hook_pre"] = h
         if self.hidden is not None:
-            for idx, w in enumerate(self.hidden):
+            for w in self.hidden:
                 h = einops.einsum(h, w, "b i h, i h m -> b i m")
-        out_pre = einops.einsum(h, self.W1.transpose(-1, -2), "b i h, i h f -> b i f") + self.b_final
-        if cache is not None:
-            cache["linear2.hook_post"] = out_pre
+        out_pre = einops.einsum(h, self.W1.transpose(-1,-2), "b i h, i h f -> b i f") + self.b_final
         return F.relu(out_pre)
 
 def train(model, dataset, batch_size=2048, lr=1e-3, steps=2000, print_freq=100):
