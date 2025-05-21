@@ -53,6 +53,84 @@ All experiments call the `optimize` function in `spd/run_spd.py`, which contains
 ### Analyze results
 Experiments contain `*_interp.py` scripts which generate the plots used in the paper.
 
+## Running TMS Locally (Without W&B)
+
+This section describes how to run the Toy Model of Superposition (TMS) experiment, including training the target model and running APD, entirely locally without requiring Weights & Biases.
+
+### Prerequisites
+
+*   Python (version as specified in `pyproject.toml`, e.g., 3.10 or higher).
+*   `pip` for installing packages.
+*   Install the necessary requirements by running `make install` or `pip install -e .` from the root of the repository.
+
+### 1. Training the TMS Model Locally
+
+The script `spd/experiments/tms/train_tms.py` is used to train the TMS target model. By default, it is configured to run locally, with W&B logging disabled.
+
+To start local training, execute:
+```bash
+python spd/experiments/tms/train_tms.py
+```
+
+This will:
+*   Use a default `TMSTrainConfig`. The script now defaults to the following configuration for local runs:
+    ```python
+    config = TMSTrainConfig(
+        wandb_project=None,  # Disables W&B logging
+        tms_model_config=TMSModelConfig(
+            n_features=40,
+            n_hidden=10,
+            n_hidden_layers=0,
+            n_instances=3,
+            device="cuda" if torch.cuda.is_available() else "cpu", # Or your preferred device
+        ),
+        feature_probability=0.05,
+        batch_size=2048,
+        steps=2000, # Note: for a well-trained model, prefer 20_000 or more
+        seed=0,
+        lr=1e-3,
+        data_generation_type="at_least_zero_active",
+        fixed_identity_hidden_layers=False,
+        fixed_random_hidden_layers=False,
+    )
+    ```
+*   Save the trained model checkpoint (e.g., `tms.pth`) and its corresponding training configuration (`tms_train_config.yaml`) into a timestamped subdirectory within `spd/experiments/tms/out/`. For example: `spd/experiments/tms/out/tms_n-features40_n-hidden10_n-hidden-layers0_n-instances3_feat_prob0.05_seed0_YYYYMMDD_HHMMSS_ms/`. Note down this path, as you'll need it for the APD step.
+
+### 2. Running APD Decomposition Locally
+
+Once the TMS target model is trained locally, you can run APD decomposition using `spd/experiments/tms/tms_decomposition.py`. This script requires a YAML configuration file.
+
+For local runs, use `spd/experiments/tms/local_tms_topk_config.yaml`.
+
+**Crucially, you must update this YAML file before running APD:**
+1.  Open `spd/experiments/tms/local_tms_topk_config.yaml`.
+2.  Locate the `task_config.pretrained_model_path` field.
+3.  Change its value from the placeholder (`"./out/tms_model_placeholder/tms.pth"`) to the actual file path of the `tms.pth` checkpoint you saved in the previous training step. For example:
+    ```yaml
+    task_config:
+      task_name: tms
+      # ... other parameters ...
+      pretrained_model_path: "./out/tms_n-features40_n-hidden10_n-hidden-layers0_n-instances3_feat_prob0.05_seed0_20231027_123456_789/tms.pth"
+      # ... other parameters ...
+    ```
+    (Remember to use the correct relative path from the repository root, or an absolute path).
+
+After updating the config file, run the APD decomposition:
+```bash
+python spd/experiments/tms/tms_decomposition.py spd/experiments/tms/local_tms_topk_config.yaml
+```
+
+APD outputs, including model checkpoints (e.g., `spd_model_*.pth`) and any generated plots, will be saved locally into a new timestamped subdirectory within `spd/experiments/tms/out/`.
+
+### 3. Managing Hyperparameters
+
+*   **TMS Model Training**:
+    *   When running `spd/experiments/tms/train_tms.py` directly, default hyperparameters are set within the `if __name__ == "__main__":` block of the script. You can modify the `TMSTrainConfig` object instantiation there for different local runs.
+    *   If you import and use `TMSTrainConfig` or the training functions as a library in your own scripts, you can define the configuration programmatically.
+
+*   **APD Decomposition**:
+    *   Hyperparameters for the APD process are defined in the YAML configuration file (e.g., `spd/experiments/tms/local_tms_topk_config.yaml`). You can edit this file to change APD settings like `topk`, `param_match_coeff`, `steps`, `lr`, etc.
+
 ## Development
 
 Suggested extensions and settings for VSCode/Cursor are provided in `.vscode/`. To use the suggested

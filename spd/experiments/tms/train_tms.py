@@ -11,7 +11,6 @@ import einops
 import matplotlib.pyplot as plt
 import numpy as np
 import torch
-import wandb
 import yaml
 from matplotlib import collections as mc
 from pydantic import BaseModel, ConfigDict, PositiveInt, model_validator
@@ -21,7 +20,13 @@ from spd.experiments.tms.models import TMSModel, TMSModelConfig
 from spd.log import logger
 from spd.utils import DatasetGeneratedDataLoader, SparseFeatureDataset, set_seed
 
-wandb.require("core")
+try:
+    import wandb
+    wandb.require("core")
+    wandb_available = True
+except ImportError:
+    wandb = None
+    wandb_available = False
 
 
 class TMSTrainConfig(BaseModel):
@@ -104,7 +109,7 @@ def train(
                     loss=loss.item() / model.config.n_instances,
                     lr=step_lr,
                 )
-                if log_wandb:
+                if log_wandb and wandb_available and wandb is not None:
                     wandb.log(
                         {"loss": loss.item() / model.config.n_instances, "lr": step_lr}, step=step
                     )
@@ -226,27 +231,27 @@ def run_train(config: TMSTrainConfig, device: str) -> None:
     out_dir = Path(__file__).parent / "out" / f"{run_name}_{timestamp}"
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    if config.wandb_project:
+    if wandb_available and wandb is not None and config.wandb_project:
         wandb.init(project=config.wandb_project, name=run_name)
 
     # Save config
     config_path = out_dir / "tms_train_config.yaml"
     with open(config_path, "w") as f:
         yaml.dump(config.model_dump(mode="json"), f, indent=2)
-    if config.wandb_project:
+    if wandb_available and wandb is not None and config.wandb_project:
         wandb.save(str(config_path), base_path=out_dir, policy="now")
     logger.info(f"Saved config to {config_path}")
 
     train(
         model,
         dataloader=dataloader,
-        log_wandb=config.wandb_project is not None,
+        log_wandb=config.wandb_project is not None, # train() already checks wandb_available
         steps=config.steps,
     )
 
     model_path = out_dir / "tms.pth"
     torch.save(model.state_dict(), model_path)
-    if config.wandb_project:
+    if wandb_available and wandb is not None and config.wandb_project:
         wandb.save(str(model_path), base_path=out_dir, policy="now")
     logger.info(f"Saved model to {model_path}")
 
@@ -267,7 +272,7 @@ if __name__ == "__main__":
     device = "cuda" if torch.cuda.is_available() else "cpu"
     # TMS 5-2
     # config = TMSTrainConfig(
-    #     wandb_project="spd-train-tms",
+    #     wandb_project=None,
     #     tms_model_config=TMSModelConfig(
     #         n_features=5,
     #         n_hidden=2,
@@ -286,7 +291,7 @@ if __name__ == "__main__":
     # )
     # TMS 40-10
     config = TMSTrainConfig(
-        wandb_project="spd-train-tms",
+        wandb_project=None,
         tms_model_config=TMSModelConfig(
             n_features=40,
             n_hidden=10,

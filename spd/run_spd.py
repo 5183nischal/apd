@@ -7,7 +7,6 @@ from typing import Any, ClassVar, Literal, Self
 import einops
 import matplotlib.pyplot as plt
 import torch
-import wandb
 from jaxtyping import Float
 from pydantic import (
     BaseModel,
@@ -34,6 +33,13 @@ from spd.utils import (
     get_lr_schedule_fn,
     get_lr_with_warmup,
 )
+
+try:
+    import wandb
+    wandb_available = True
+except ImportError:
+    wandb = None
+    wandb_available = False
 
 
 class TMSTaskConfig(BaseModel):
@@ -594,7 +600,7 @@ def optimize(
                     val_repr = f"\n{val.tolist()}" if val.numel() > 1 else f" {val.item()}"
                     tqdm.write(f"{loss_name}:{val_repr}")
 
-            if config.wandb_project:
+            if wandb_available and wandb is not None and config.wandb_project:
                 metrics = {
                     "pnorm": config.pnorm,
                     "lr": step_lr,
@@ -623,7 +629,7 @@ def optimize(
                 topk_mask=topk_mask,
                 batch=batch,
             )
-            if config.wandb_project:
+            if wandb_available and wandb is not None and config.wandb_project:
                 wandb.log(
                     {k: wandb.Image(v) for k, v in fig_dict.items()},
                     step=step,
@@ -636,14 +642,14 @@ def optimize(
         ) and out_dir is not None:
             torch.save(model.state_dict(), out_dir / f"spd_model_{step}.pth")
             tqdm.write(f"Saved model to {out_dir / f'spd_model_{step}.pth'}")
-            if config.wandb_project:
+            if wandb_available and wandb is not None and config.wandb_project:
                 wandb.save(str(out_dir / f"spd_model_{step}.pth"), base_path=out_dir, policy="now")
 
         # Skip gradient step if we are at the last step (last step just for plotting and logging)
         if step != config.steps:
             loss.backward()
 
-            if step % config.print_freq == 0 and config.wandb_project:
+            if step % config.print_freq == 0 and wandb_available and wandb is not None and config.wandb_project:
                 # Calculate gradient norm
                 grad_norm: float = 0.0
                 for param in model.parameters():

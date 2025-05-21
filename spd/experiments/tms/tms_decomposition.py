@@ -12,7 +12,6 @@ import fire
 import matplotlib.pyplot as plt
 import numpy as np
 import torch
-import wandb
 import yaml
 from jaxtyping import Float
 from torch import Tensor
@@ -33,9 +32,18 @@ from spd.utils import (
     load_config,
     set_seed,
 )
-from spd.wandb_utils import init_wandb
 
-wandb.require("core")
+try:
+    import wandb
+    from spd.wandb_utils import init_wandb
+    wandb_available = True
+except ImportError:
+    wandb = None
+    init_wandb = None
+    wandb_available = False
+
+if wandb_available and wandb:
+    wandb.require("core")
 
 
 def get_run_name(config: Config, tms_model_config: TMSModelConfig) -> str:
@@ -379,7 +387,7 @@ def save_target_model_info(
     with open(out_dir / "tms_train_config.yaml", "w") as f:
         yaml.dump(tms_model_train_config_dict, f, indent=2)
 
-    if save_to_wandb:
+    if wandb_available and wandb is not None and save_to_wandb:
         wandb.save(str(out_dir / "tms.pth"), base_path=out_dir, policy="now")
         wandb.save(str(out_dir / "tms_train_config.yaml"), base_path=out_dir, policy="now")
 
@@ -391,7 +399,7 @@ def main(
 
     config = load_config(config_path_or_obj, config_model=Config)
 
-    if config.wandb_project:
+    if wandb_available and wandb is not None and init_wandb is not None and config.wandb_project:
         config = init_wandb(config, config.wandb_project, sweep_config_path)
 
     task_config = config.task_config
@@ -407,7 +415,7 @@ def main(
     target_model.eval()
 
     run_name = get_run_name(config=config, tms_model_config=target_model.config)
-    if config.wandb_project:
+    if wandb_available and wandb is not None and init_wandb is not None and config.wandb_project:
         assert wandb.run, "wandb.run must be initialized before training"
         wandb.run.name = run_name
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")[:-3]
@@ -416,11 +424,11 @@ def main(
 
     with open(out_dir / "final_config.yaml", "w") as f:
         yaml.dump(config.model_dump(mode="json"), f, indent=2)
-    if config.wandb_project:
+    if wandb_available and wandb is not None and init_wandb is not None and config.wandb_project:
         wandb.save(str(out_dir / "final_config.yaml"), base_path=out_dir, policy="now")
 
     save_target_model_info(
-        save_to_wandb=config.wandb_project is not None,
+        save_to_wandb=wandb_available and wandb is not None and init_wandb is not None and config.wandb_project is not None,
         out_dir=out_dir,
         tms_model=target_model,
         tms_model_train_config_dict=target_model_train_config_dict,
@@ -468,7 +476,7 @@ def main(
         plot_results_fn=make_plots,
     )
 
-    if config.wandb_project:
+    if wandb_available and wandb is not None and init_wandb is not None and config.wandb_project:
         wandb.finish()
 
 

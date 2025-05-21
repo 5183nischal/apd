@@ -2,13 +2,20 @@ from pathlib import Path
 from typing import Any
 
 import torch
-import wandb
 import yaml
 from jaxtyping import Bool, Float
 from pydantic import BaseModel, ConfigDict, NonNegativeInt, PositiveInt
 from torch import Tensor, nn
 from torch.nn import functional as F
-from wandb.apis.public import Run
+
+try:
+    import wandb
+    from wandb.apis.public import Run
+    wandb_available = True
+except ImportError:
+    wandb = None
+    Run = None
+    wandb_available = False
 
 from spd.hooks import HookedRootModule
 from spd.models.base import SPDModel
@@ -104,6 +111,10 @@ class TMSModel(HookedRootModule):
     @staticmethod
     def _download_wandb_files(wandb_project_run_id: str) -> TMSModelPaths:
         """Download the relevant files from a wandb run."""
+        if not wandb_available:
+            raise RuntimeError(
+                "W&B features are unavailable. Please install W&B and log in, or use a local model path."
+            )
         api = wandb.Api()
         run: Run = api.run(wandb_project_run_id)
         run_dir = fetch_wandb_run_dir(run.id)
@@ -237,6 +248,10 @@ class TMSSPDModel(SPDModel):
     @staticmethod
     def _download_wandb_files(wandb_project_run_id: str) -> TMSSPDPaths:
         """Download the relevant files from a wandb run."""
+        if not wandb_available:
+            raise RuntimeError(
+                "W&B features are unavailable. Please install W&B and log in, or use a local model path."
+            )
         api = wandb.Api()
         run: Run = api.run(wandb_project_run_id)
 
